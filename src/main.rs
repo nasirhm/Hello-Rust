@@ -1,4 +1,5 @@
 #![feature(proc_macro_hygiene, decl_macro)] //Nightly-only language needed for rocket.
+use rocket_contrib::json::Json;
 use serde::*;
 /// Host information structure returned at /hostinfo
 #[derive(Serialize, Debug)]
@@ -24,7 +25,6 @@ fn hostinfo() -> Json<HostInfo> {
     // parse into UTF-8 (very unlikely)
     let hostname = gethostname::gethostname()
         .into_string()
-        .or(|_| "unknown".to_string())
         .unwrap();
 
     Json(HostInfo{
