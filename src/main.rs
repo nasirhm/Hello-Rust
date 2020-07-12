@@ -1,8 +1,13 @@
-#![feature(proc_macro_hygiene, decl_macro)] //Nightly-only language needed for rocket.
+#![feature(proc_macro_hygiene, decl_macro)] // Nightly-only language needed for rocket.
+// Import OpenAPI macros
+#[macro_use]
+extern crate rocket_okapi;
+
+use rocket_okapi::JsonSchema;
 use rocket_contrib::json::Json;
 use serde::*;
 /// Host information structure returned at /hostinfo
-#[derive(Serialize, Debug)]
+#[derive(Serialize, JsonSchema, Debug)]
 struct HostInfo {
     hostname: String,
     pid: u32,
@@ -14,31 +19,41 @@ struct HostInfo {
 extern crate rocket;
 
 /// Create route / that returns "Hello, World!"
+// Adding the route to OpenAPI schema.
+#[openapi]
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"
 }
-
+use rocket_okapi::{OpenApiError, Result};
+// Adding the route to OpenAPI schema.
+#[openapi]
 #[get("/hostinfo")]
-fn hostinfo() -> Json<HostInfo> {
-    // gets the current machine hostname or "unknown" if the hostname doesn't
-    // parse into UTF-8 (very unlikely)
-    let hostname = gethostname::gethostname()
-        .into_string()
-        .unwrap();
-
-    Json(HostInfo{
-        hostname: hostname,
-        pid: std::process::id(),
-        uptime: psutil::host::uptime()
-            .unwrap() // normally this is a bad idea, but this code is
-                      // very unlikely to fail.
-            .as_secs(),
-    })
+fn hostinfo() -> Result<Json<HostInfo>> {
+    match gethostname::gethostname().into_string() {
+        Ok(hostname) => Ok(Json(HostInfo {
+            hostname: hostname,
+            pid: std::process::id(),
+            uptime: psutil::host::uptime().unwrap().as_secs(),
+        })),
+    Err(_) => Err(OpenApiError::new(format!(
+                "hotname does not parse a UTF-8"
+                ))),
+    }
 }
 
+use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
+
 fn main() {
-    rocket::ignite().mount("/", routes![index, hostinfo]).launch();
+    rocket::ignite()
+        .mount("/", routes_with_openapi![index, hostinfo])
+        .mount(
+            "/swagger-ui/",
+            make_swagger_ui(&SwaggerUIConfig {
+            url: Some("../openapi.json".to_owned()),
+            urls: None,}),
+            )
+        .launch();
 }
 
 #[cfg(test)] // Only compile this when unit testing is requested
